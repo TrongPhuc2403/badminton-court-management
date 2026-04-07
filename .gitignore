@@ -1,0 +1,14 @@
+
+# Loại trừ file zip
+*.zip
+
+# Loại trừ file Excel
+*.xlsx
+*.xls
+
+# Loại trừ file PDF
+*.pdf
+
+# Loại trừ các thư mục hệ thống
+.DS_Store
+Thumbs.db
