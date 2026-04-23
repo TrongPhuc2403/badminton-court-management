@@ -1,7 +1,7 @@
 <?php
 require_once 'config/database.php';
 
-$password = password_hash('123456', PASSWORD_DEFAULT);
+$password = password_hash('admin123', PASSWORD_DEFAULT);
 
 mysqli_query($conn, "DELETE FROM users WHERE phone='admin' OR email='admin@badminton.local'");
 
@@ -15,7 +15,7 @@ $phone = 'admin';
 $email = 'admin@badminton.local';
 $role = 'admin';
 
-mysqli_stmt_bind_param($stmt, "sssss", $fullName, $phone, $email, $password, $role);
+mysqli_stmt_bind_param($stmt, 'sssss', $fullName, $phone, $email, $password, $role);
 mysqli_stmt_execute($stmt);
 
-echo "Tạo admin thành công!";
+echo 'Tạo admin thành công!';

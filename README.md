@@ -1,83 +1,191 @@
-HƯỚNG DẪN CHẠY WEB QUẢN LÍ SÂN CẦU LÔNG
+# Badminton Manager
 
-1. Cài đặt môi trường
+Ứng dụng quản lý sân cầu lông viết bằng PHP thuần và MySQL, chạy trên XAMPP.
 
-Tải và cài đặt XAMPP:
-👉 https://www.apachefriends.org/
+## 1. Yêu cầu môi trường
 
-Sau khi cài:
+- Windows
+- XAMPP
+- Apache
+- MySQL hoặc MariaDB
+- PHP 8.0 trở lên
 
-Mở XAMPP
-Start:
-Apache ✅
-MySQL ✅ 2. Copy source code
+Khuyến nghị cài tại:
 
-Copy thư mục project vào:
+```text
+C:\xampp
+```
 
-C:\xampp\htdocs\
+## 2. Chép source code
 
-Đảm bảo đường dẫn:
+Đặt project vào:
 
-C:\xampp\htdocs\badminton-manager 3. Tạo database
-Bước 1:
+```text
+C:\xampp\htdocs\badminton-manager
+```
 
-Mở trình duyệt:
+## 3. Bật dịch vụ
 
-http://localhost/phpmyadmin
-Bước 2:
+Mở XAMPP Control Panel và start:
 
-Tạo database mới:
+- `Apache`
+- `MySQL`
 
+## 4. Tạo database
+
+1. Mở `http://localhost/phpmyadmin`
+2. Tạo database:
+
+```sql
 badminton_manager
-Bước 3:
-Chọn database vừa tạo
-Chọn tab SQL
-Copy toàn bộ nội dung file database.sql
-Bấm Thực hiện 4. Cấu hình database
+```
 
-Mở file:
+3. Import file [database.sql](/abs/path/c:/xampp/htdocs/badminton-manager/database.sql:1)
 
-config/database.php
+`database.sql` là file SQL hoàn chỉnh. Không cần chạy thêm file migration nào khác.
 
-Kiểm tra:
+## 5. Cấu hình database
 
+Mở [config/database.php](/abs/path/c:/xampp/htdocs/badminton-manager/config/database.php:1) và sửa lại cho đúng máy đích.
+
+Ví dụ:
+
+```php
+<?php
 $host = "localhost";
 $username = "root";
 $password = "";
-$database = "badminton_manager"; 5. Chạy project
+$database = "badminton_manager";
 
-Mở trình duyệt:
+$conn = mysqli_connect("127.0.0.1:3306", $username, $password, $database);
 
-http://localhost/badminton-manager 6. Tài khoản đăng nhập
-Admin
-SĐT: admin
-Mật khẩu: password 7. Nếu không đăng nhập được admin
+if (!$conn) {
+    die("Kết nối thất bại: " . mysqli_connect_error());
+}
 
-Tạo file make_admin.php trong project:
+mysqli_set_charset($conn, "utf8mb4");
+```
 
+## 6. Cấu hình email xác minh
+
+Tạo file:
+
+```text
+config/email.php
+```
+
+Dựa trên mẫu [config/email.php.example](/abs/path/c:/xampp/htdocs/badminton-manager/config/email.php.example:1)
+
+Ví dụ:
+
+```php
 <?php
-require_once 'config/database.php';
 
-$password = password_hash('123456', PASSWORD_DEFAULT);
+return [
+    'transport' => 'smtp',
+    'host' => 'smtp.gmail.com',
+    'port' => 587,
+    'encryption' => 'tls',
+    'username' => 'your_email@gmail.com',
+    'password' => 'your_app_password',
+    'from_email' => 'your_email@gmail.com',
+    'from_name' => 'Badminton Manager',
+    'timeout' => 20,
+];
+```
 
-mysqli_query($conn, "DELETE FROM users WHERE phone='admin'");
+Nếu email gửi lỗi, hệ thống sẽ ghi link xác minh vào:
 
-$stmt = mysqli_prepare($conn, "INSERT INTO users (full_name, phone, password, role) VALUES (?, ?, ?, ?)");
+```text
+storage/email_verification.log
+```
 
-$full_name = 'Quản trị viên';
-$phone = 'admin';
-$role = 'admin';
+## 7. Cấu hình QR chuyển khoản
 
-mysqli_stmt_bind_param($stmt, "ssss", $full_name, $phone, $password, $role);
-mysqli_stmt_execute($stmt);
+Tạo file:
 
-echo "Tạo admin thành công!";
+```text
+config/payment.php
+```
+
+Dựa trên mẫu [config/payment.php.example](/abs/path/c:/xampp/htdocs/badminton-manager/config/payment.php.example:1)
+
+Ví dụ với `MB Bank`:
+
+```php
+<?php
+
+return [
+    'bank_id' => '970422',
+    'account_no' => '0941473515',
+    'account_name' => 'NGUYEN TRONG PHUC',
+    'template' => 'compact2',
+];
+```
+
+Lưu ý:
+
+- `bank_id` là mã ngân hàng VietQR/BIN, không phải số tài khoản
+- `account_no` là số tài khoản nhận tiền
+
+## 8. Chạy project
 
 Mở:
 
+```text
+http://localhost/badminton-manager
+```
+
+Trang đăng nhập:
+
+```text
+http://localhost/badminton-manager/auth/login.php
+```
+
+## 9. Tài khoản admin mặc định
+
+Sau khi import [database.sql](/abs/path/c:/xampp/htdocs/badminton-manager/database.sql:1), tài khoản admin mặc định là:
+
+- Tên đăng nhập thực tế: nhập `admin` ở ô email hoặc số điện thoại
+- Email: `admin@badminton.local`
+- Mật khẩu: `admin123`
+
+Lưu ý: hệ thống hiện không có cột `username` riêng. Giá trị `admin` đang được dùng như thông tin đăng nhập trong ô `email/số điện thoại`.
+
+## 10. Tạo lại admin khi cần
+
+Project có sẵn file [make_admin.php](/abs/path/c:/xampp/htdocs/badminton-manager/make_admin.php:1).
+
+Chạy:
+
+```text
 http://localhost/badminton-manager/make_admin.php
+```
 
-Đăng nhập:
+Sau đó đăng nhập bằng:
 
-SĐT: admin
-Mật khẩu: 123456
+- Tên đăng nhập: `admin`
+- Email: `admin@badminton.local`
+- Mật khẩu: `admin123`
+
+## 11. Chức năng chính
+
+- Đăng ký tài khoản khách hàng
+- Xác minh tài khoản qua email
+- Đăng nhập bằng email hoặc số điện thoại
+- Cập nhật hồ sơ khách hàng
+- Đặt sân theo ngày và khung giờ
+- Thanh toán bằng tiền mặt hoặc chuyển khoản QR
+- Khách xác nhận đã chuyển khoản
+- Admin xác nhận thanh toán thủ công
+- Xem lịch sử đặt sân
+- Quản lý khách hàng và báo cáo cơ bản
+
+## 12. Lưu ý khi chuyển sang máy khác
+
+- Kiểm tra lại [config/database.php](/abs/path/c:/xampp/htdocs/badminton-manager/config/database.php:1)
+- Tạo lại `config/email.php` và `config/payment.php`
+- Không cần chạy migration, chỉ cần import `database.sql`
+- Không commit `config/email.php` và `config/payment.php`
+
+Các file bí mật này đã được ignore trong [.gitignore](/abs/path/c:/xampp/htdocs/badminton-manager/.gitignore:1).

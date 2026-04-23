@@ -62,7 +62,7 @@ INSERT INTO users (full_name, phone, email, password, role, is_verified) VALUES
     'Quản trị viên',
     'admin',
     'admin@badminton.local',
-    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.ogZTlR6D4jV0L1Wy',
+    '$2y$12$ZpwFJQZSyn7cXlAGlAO7BeqJpgr6UFz.NWxv0Fx2J7nWj3rYhjX5a',
     'admin',
     1
 );
