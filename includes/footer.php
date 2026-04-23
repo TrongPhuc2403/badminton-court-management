@@ -3,6 +3,12 @@ $supportPhone = '0941473515';
 $supportEmail = 'hotrodatsan@gmail.com';
 $supportAddress = 'Số 28 đường Tạ Quang Bửu, phường Chánh Hưng, Thành phố Hồ Chí Minh';
 $currentYear = date('Y');
+$currentPath = getCurrentPath();
+$hideGuestFooterPaths = [
+    '/badminton-manager/auth/login.php',
+    '/badminton-manager/auth/register.php',
+];
+$shouldHideGuestFooter = in_array($currentPath, $hideGuestFooterPaths, true);
 
 $discoverLinks = isset($_SESSION['user']['role']) && $_SESSION['user']['role'] === 'admin'
     ? [
@@ -94,34 +100,36 @@ $supportLinks = [
 <?php else: ?>
         </div>
 
-        <footer class="site-footer site-footer-guest">
-            <div class="site-footer-grid">
-                <div class="site-footer-brand">
-                    <a class="site-footer-logo" href="/badminton-manager/index.php">
-                        Badminton<span>Manager</span>
-                    </a>
-                    <p>Đặt sân nhanh, xem lịch rõ ràng và nhận hỗ trợ trực tiếp từ hệ thống quản lí sân cầu lông.</p>
-                </div>
+        <?php if (!$shouldHideGuestFooter): ?>
+            <footer class="site-footer site-footer-guest">
+                <div class="site-footer-grid">
+                    <div class="site-footer-brand">
+                        <a class="site-footer-logo" href="/badminton-manager/index.php">
+                            Badminton<span>Manager</span>
+                        </a>
+                        <p>Đặt sân nhanh, xem lịch rõ ràng và nhận hỗ trợ trực tiếp từ hệ thống quản lí sân cầu lông.</p>
+                    </div>
 
-                <div class="site-footer-column site-footer-contact">
-                    <h3>Liên hệ</h3>
-                    <div class="site-footer-contact-list">
-                        <a href="tel:<?= e($supportPhone) ?>">
-                            <strong>Tổng đài hỗ trợ</strong>
-                            <span><?= e($supportPhone) ?></span>
-                        </a>
-                        <a href="mailto:<?= e($supportEmail) ?>">
-                            <strong>Email</strong>
-                            <span><?= e($supportEmail) ?></span>
-                        </a>
-                        <div class="site-footer-address">
-                            <strong>Địa chỉ</strong>
-                            <span><?= e($supportAddress) ?></span>
+                    <div class="site-footer-column site-footer-contact">
+                        <h3>Liên hệ</h3>
+                        <div class="site-footer-contact-list">
+                            <a href="tel:<?= e($supportPhone) ?>">
+                                <strong>Tổng đài hỗ trợ</strong>
+                                <span><?= e($supportPhone) ?></span>
+                            </a>
+                            <a href="mailto:<?= e($supportEmail) ?>">
+                                <strong>Email</strong>
+                                <span><?= e($supportEmail) ?></span>
+                            </a>
+                            <div class="site-footer-address">
+                                <strong>Địa chỉ</strong>
+                                <span><?= e($supportAddress) ?></span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </footer>
+            </footer>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 </body>
