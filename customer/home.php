@@ -1,6 +1,9 @@
 <?php
 require_once '../includes/customer_auth.php';
 require_once '../config/database.php';
+require_once '../includes/functions.php';
+
+ensureReviewTables($conn);
 require_once '../includes/header.php';
 
 $courts = mysqli_query($conn, "SELECT * FROM courts ORDER BY id ASC");
@@ -9,10 +12,31 @@ $index = 1;
 $venueAddress = "Số 28 đường Tạ Quang Bửu, Phường Chánh Hưng, TP. Hồ Chí Minh";
 $destinationQuery = urlencode($venueAddress);
 
+$reviewStatsResult = mysqli_query($conn, "
+    SELECT court_id, ROUND(AVG(overall_rating), 1) AS avg_rating, COUNT(*) AS review_count
+    FROM court_reviews
+    GROUP BY court_id
+");
+$reviewStatsByCourt = [];
+while ($reviewStat = mysqli_fetch_assoc($reviewStatsResult)) {
+    $reviewStatsByCourt[(int) $reviewStat['court_id']] = $reviewStat;
+}
+
+$favoriteCourts = mysqli_query($conn, "
+    SELECT c.name, ROUND(AVG(cr.overall_rating), 1) AS avg_rating, COUNT(cr.id) AS review_count
+    FROM court_reviews cr
+    JOIN courts c ON c.id = cr.court_id
+    GROUP BY cr.court_id, c.name
+    HAVING COUNT(cr.id) > 0
+    ORDER BY avg_rating DESC, review_count DESC, c.name ASC
+    LIMIT 3
+");
+
 while ($court = mysqli_fetch_assoc($courts)) {
     $imagePath = !empty($court['image_path'])
         ? '/badminton-manager/' . e($court['image_path'])
         : '/badminton-manager/assets/san-cau.jpg';
+    $reviewStat = $reviewStatsByCourt[(int) $court['id']] ?? null;
 
     ob_start();
     ?>
@@ -24,12 +48,15 @@ while ($court = mysqli_fetch_assoc($courts)) {
         <div class="court-card-body">
             <h4>Sân <?= $index ?></h4>
 
-            <div class="court-mini-slots">
-                <span>A</span>
-                <span>B</span>
-                <span>C</span>
-                <span>D</span>
-            </div>
+            <?php if ($reviewStat): ?>
+                <div class="court-rating-summary">
+                    <strong><?= formatRating($reviewStat['avg_rating']) ?>/5</strong>
+                    <span><?= e(renderStars($reviewStat['avg_rating'])) ?></span>
+                    <small><?= (int) $reviewStat['review_count'] ?> đánh giá</small>
+                </div>
+            <?php else: ?>
+                <p class="court-card-caption">Chưa có đánh giá. Hãy là người đầu tiên chia sẻ trải nghiệm.</p>
+            <?php endif; ?>
 
             <p class="court-status-line">
                 Trạng thái:
@@ -61,7 +88,7 @@ while ($court = mysqli_fetch_assoc($courts)) {
         <h3><span class="section-title-icon">🗂</span>Hướng dẫn</h3>
         <ul class="info-list">
             <li>Chọn một sân để xem lịch và đặt sân.</li>
-            <li>Mỗi sân có 4 sân cầu (A, B, C, D).</li>
+            <li>Kiểm tra trạng thái sẵn sàng trước khi chọn khung giờ phù hợp.</li>
         </ul>
     </div>
 
@@ -72,6 +99,27 @@ while ($court = mysqli_fetch_assoc($courts)) {
             <li>Thứ 2 - Thứ 6, 17:00 - 22:00: 120.000 VNĐ / giờ</li>
             <li>Thứ 7 - Chủ nhật, 04:00 - 22:00: 120.000 VNĐ / giờ</li>
         </ul>
+    </div>
+</div>
+
+<div class="section-card favorite-courts-section">
+    <div class="section-header booking-list-header">
+        <h3><span class="section-title-icon">★</span>Top sân được yêu thích</h3>
+    </div>
+
+    <div class="favorite-courts-grid">
+        <?php if (mysqli_num_rows($favoriteCourts) > 0): ?>
+            <?php while ($favoriteCourt = mysqli_fetch_assoc($favoriteCourts)): ?>
+                <div class="favorite-court-card">
+                    <strong><?= e($favoriteCourt['name']) ?></strong>
+                    <div class="favorite-court-rating"><?= formatRating($favoriteCourt['avg_rating']) ?>/5</div>
+                    <p><?= e(renderStars($favoriteCourt['avg_rating'])) ?></p>
+                    <small><?= (int) $favoriteCourt['review_count'] ?> lượt đánh giá</small>
+                </div>
+            <?php endwhile; ?>
+        <?php else: ?>
+            <div class="support-empty-box">Chưa có đánh giá nào để xếp hạng sân yêu thích.</div>
+        <?php endif; ?>
     </div>
 </div>
 

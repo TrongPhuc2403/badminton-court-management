@@ -7,6 +7,9 @@ USE badminton_manager;
 SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS court_reviews;
+DROP TABLE IF EXISTS support_messages;
+DROP TABLE IF EXISTS support_threads;
 DROP TABLE IF EXISTS courts;
 DROP TABLE IF EXISTS users;
 
@@ -53,6 +56,57 @@ CREATE TABLE bookings (
         ON UPDATE CASCADE,
     CONSTRAINT fk_bookings_court
         FOREIGN KEY (court_id) REFERENCES courts(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE court_reviews (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    booking_id INT NOT NULL,
+    user_id INT NOT NULL,
+    court_id INT NOT NULL,
+    overall_rating TINYINT NOT NULL,
+    court_quality_rating TINYINT NOT NULL,
+    lighting_rating TINYINT NOT NULL,
+    service_rating TINYINT NOT NULL,
+    comment TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_court_reviews_booking UNIQUE (booking_id),
+    CONSTRAINT fk_court_reviews_booking
+        FOREIGN KEY (booking_id) REFERENCES bookings(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_court_reviews_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_court_reviews_court
+        FOREIGN KEY (court_id) REFERENCES courts(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE support_threads (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    subject VARCHAR(150) NOT NULL,
+    status ENUM('open', 'answered', 'closed') NOT NULL DEFAULT 'open',
+    last_message_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_support_threads_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE support_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    thread_id INT NOT NULL,
+    sender_role ENUM('customer', 'admin', 'bot') NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_support_messages_thread
+        FOREIGN KEY (thread_id) REFERENCES support_threads(id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -111,3 +165,26 @@ INSERT INTO bookings (
 (3, 2, DATE_ADD(CURDATE(), INTERVAL 1 DAY), '17:00:00', '19:00:00', 240000, 'bank_transfer', 'BOOKING-0002', 'paid', 'confirmed'),
 (2, 3, DATE_ADD(CURDATE(), INTERVAL 2 DAY), '06:00:00', '08:00:00', 180000, 'cash', 'BOOKING-0003', 'unpaid', 'confirmed'),
 (3, 1, DATE_ADD(CURDATE(), INTERVAL 3 DAY), '19:00:00', '21:00:00', 240000, 'bank_transfer', 'BOOKING-0004', 'paid', 'confirmed');
+
+INSERT INTO support_threads (user_id, subject, status, last_message_at) VALUES
+(2, 'Cần hỗ trợ cách đặt sân', 'answered', NOW()),
+(3, 'Muốn hỏi về chính sách hủy', 'open', NOW());
+
+INSERT INTO support_messages (thread_id, sender_role, message) VALUES
+(1, 'customer', 'Mình muốn biết cách đặt sân trên hệ thống như thế nào.'),
+(1, 'admin', 'Bạn vào mục Đặt sân, chọn sân, ngày, giờ và phương thức thanh toán rồi bấm Đặt sân để xác nhận booking.'),
+(2, 'customer', 'Nếu gần tới giờ chơi thì mình còn hủy sân được không?');
+
+INSERT INTO court_reviews (
+    booking_id,
+    user_id,
+    court_id,
+    overall_rating,
+    court_quality_rating,
+    lighting_rating,
+    service_rating,
+    comment
+) VALUES
+(1, 2, 1, 5, 5, 4, 5, 'Sân sạch, lưới căng tốt và nhân viên hỗ trợ nhanh.'),
+(2, 3, 2, 4, 4, 5, 4, 'Ánh sáng ổn, trải nghiệm tổng thể tốt.'),
+(3, 2, 3, 5, 5, 5, 4, 'Mặt sân đẹp, đánh rất thoải mái.');

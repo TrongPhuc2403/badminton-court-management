@@ -46,11 +46,13 @@ require_once __DIR__ . '/functions.php';
                 <a class="<?= isActiveMenu('/badminton-manager/admin/index.php') ?>" href="/badminton-manager/admin/index.php">Trang chủ</a>
                 <a class="<?= isActiveMenu('/badminton-manager/admin/bookings.php') ?>" href="/badminton-manager/admin/bookings.php">Quản lí đặt sân</a>
                 <a class="<?= isActiveMenu('/badminton-manager/admin/customers.php') ?>" href="/badminton-manager/admin/customers.php">Khách hàng</a>
-                <a class="<?= isActiveMenu('/badminton-manager/admin/reports.php') ?>" href="/badminton-manager/admin/reports.php">Doanh thu</a>
+                <a class="<?= isActiveMenu('/badminton-manager/admin/reports.php') ?>" href="/badminton-manager/admin/reports.php">Báo cáo</a>
+                <a class="<?= isActiveMenu('/badminton-manager/admin/support.php') ?>" href="/badminton-manager/admin/support.php">Hỗ trợ</a>
             <?php else: ?>
                 <a class="<?= isActiveMenu('/badminton-manager/customer/home.php') ?>" href="/badminton-manager/customer/home.php">Trang chủ</a>
                 <a class="<?= isActiveMenu('/badminton-manager/customer/booking.php') ?>" href="/badminton-manager/customer/booking.php">Đặt sân</a>
                 <a class="<?= isActiveMenu('/badminton-manager/customer/my_bookings.php') ?>" href="/badminton-manager/customer/my_bookings.php">Lịch sử đặt sân</a>
+                <a class="<?= isActiveMenu('/badminton-manager/customer/support.php') ?>" href="/badminton-manager/customer/support.php">Hỗ trợ</a>
                 <a class="<?= isActiveMenu('/badminton-manager/customer/profile.php') ?>" href="/badminton-manager/customer/profile.php">Thông tin tài khoản</a>
                 <a class="<?= isActiveMenu('/badminton-manager/auth/change_password.php') ?>" href="/badminton-manager/auth/change_password.php">Đổi mật khẩu</a>
             <?php endif; ?>

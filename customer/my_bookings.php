@@ -2,7 +2,8 @@
 require_once '../includes/customer_auth.php';
 require_once '../config/database.php';
 require_once '../includes/functions.php';
-require_once '../includes/header.php';
+
+ensureReviewTables($conn);
 
 $success = '';
 $error = '';
@@ -12,24 +13,31 @@ if (isset($_GET['success'])) {
         $success = 'Đã cập nhật trạng thái thanh toán cho đơn đặt sân.';
     } elseif ($_GET['success'] === 'booking_cancelled') {
         $success = 'Đã hủy đơn đặt sân.';
+    } elseif ($_GET['success'] === 'review_saved') {
+        $success = 'Đã lưu đánh giá sân và dịch vụ.';
     }
 }
 
-if (isset($_GET['error'])) {
-    if ($_GET['error'] === 'invalid_payment_confirmation') {
-        $error = 'Không thể cập nhật thanh toán cho đơn này.';
-    }
+if (isset($_GET['error']) && $_GET['error'] === 'invalid_payment_confirmation') {
+    $error = 'Không thể cập nhật thanh toán cho đơn này.';
 }
 
-$sql = "SELECT b.*, c.name AS court_name
+$sql = "SELECT
+            b.*,
+            c.name AS court_name,
+            cr.id AS review_id,
+            cr.overall_rating
         FROM bookings b
         JOIN courts c ON b.court_id = c.id
+        LEFT JOIN court_reviews cr ON cr.booking_id = b.id
         WHERE b.user_id = ?
         ORDER BY b.booking_date DESC, b.start_time DESC";
 $stmt = mysqli_prepare($conn, $sql);
 mysqli_stmt_bind_param($stmt, 'i', $_SESSION['user']['id']);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
+
+require_once '../includes/header.php';
 ?>
 
 <div class="page-title">
@@ -54,6 +62,7 @@ $result = mysqli_stmt_get_result($stmt);
             <th>Phương thức</th>
             <th>Thanh toán</th>
             <th>Trạng thái</th>
+            <th>Đánh giá</th>
             <th>Hành động</th>
         </tr>
         <?php while ($row = mysqli_fetch_assoc($result)): ?>
@@ -74,6 +83,18 @@ $result = mysqli_stmt_get_result($stmt);
                     </span>
                 </td>
                 <td>
+                    <?php if ($row['review_id']): ?>
+                        <a class="review-inline-link" href="/badminton-manager/customer/review.php?booking_id=<?= (int) $row['id'] ?>">
+                            <span class="review-inline-stars"><?= e(renderStars($row['overall_rating'])) ?></span>
+                            <small><?= formatRating($row['overall_rating']) ?>/5</small>
+                        </a>
+                    <?php elseif ($row['status'] === 'confirmed' && bookingCanBeReviewed($row['booking_date'], $row['end_time'])): ?>
+                        <a class="badge badge-review-ready" href="/badminton-manager/customer/review.php?booking_id=<?= (int) $row['id'] ?>">Có thể đánh giá</a>
+                    <?php else: ?>
+                        <span class="text-muted">Chưa mở</span>
+                    <?php endif; ?>
+                </td>
+                <td>
                     <?php if (
                         $row['status'] === 'confirmed' &&
                         $row['payment_status'] === 'unpaid' &&
@@ -85,6 +106,10 @@ $result = mysqli_stmt_get_result($stmt);
                         </form>
                     <?php elseif ($row['status'] === 'confirmed' && bookingCanBeCancelled($row['booking_date'], $row['start_time'])): ?>
                         <a class="button-danger" onclick="return confirm('Bạn có chắc muốn hủy booking này?')" href="/badminton-manager/customer/cancel_booking.php?id=<?= (int) $row['id'] ?>">Hủy</a>
+                    <?php elseif ($row['status'] === 'confirmed' && bookingCanBeReviewed($row['booking_date'], $row['end_time'])): ?>
+                        <a class="button" href="/badminton-manager/customer/review.php?booking_id=<?= (int) $row['id'] ?>">
+                            <?= $row['review_id'] ? 'Xem đánh giá' : 'Đánh giá' ?>
+                        </a>
                     <?php else: ?>
                         -
                     <?php endif; ?>

@@ -5,6 +5,121 @@ function e($value)
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function ensureSupportTables($conn)
+{
+    mysqli_query(
+        $conn,
+        "CREATE TABLE IF NOT EXISTS support_threads (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            subject VARCHAR(150) NOT NULL,
+            status ENUM('open', 'answered', 'closed') NOT NULL DEFAULT 'open',
+            last_message_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_support_threads_user
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+
+    mysqli_query(
+        $conn,
+        "CREATE TABLE IF NOT EXISTS support_messages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            thread_id INT NOT NULL,
+            sender_role ENUM('customer', 'admin', 'bot') NOT NULL,
+            message TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_support_messages_thread
+                FOREIGN KEY (thread_id) REFERENCES support_threads(id)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function getSupportQuickQuestions()
+{
+    return [
+        'Giá sân như thế nào?',
+        'Giờ mở cửa của sân là khi nào?',
+        'Chính sách hủy sân ra sao?',
+        'Cách đặt sân trên hệ thống?',
+    ];
+}
+
+function getSupportFaqMap()
+{
+    return [
+        'gia san' => [
+            'title' => 'Giá sân',
+            'answer' => 'Thứ 2 đến thứ 6 từ 04:00 - 16:00 là 90.000 VNĐ/giờ. Từ 17:00 - 22:00 là 120.000 VNĐ/giờ. Thứ 7 và Chủ nhật áp dụng 120.000 VNĐ/giờ suốt thời gian mở cửa.',
+        ],
+        'gio mo cua' => [
+            'title' => 'Giờ mở cửa',
+            'answer' => 'Sân mở cửa từ 04:00 đến 22:00 hằng ngày. Hệ thống chỉ cho đặt các khung giờ tròn nằm trong khoảng thời gian này.',
+        ],
+        'huy san' => [
+            'title' => 'Chính sách hủy sân',
+            'answer' => 'Bạn có thể hủy khi đơn vẫn còn ở trạng thái đã xác nhận và chưa tới giờ bắt đầu chơi. Nếu booking đã qua giờ bắt đầu thì hệ thống sẽ không cho hủy nữa.',
+        ],
+        'cach dat san' => [
+            'title' => 'Cách đặt sân',
+            'answer' => 'Vào mục Đặt sân, chọn sân, ngày, giờ bắt đầu, giờ kết thúc và phương thức thanh toán. Sau đó bấm Xem tiền để kiểm tra chi phí hoặc bấm Đặt sân để xác nhận booking.',
+        ],
+    ];
+}
+
+function normalizeVietnameseText($value)
+{
+    $value = strtolower(trim((string) $value));
+    $map = [
+        'à' => 'a', 'á' => 'a', 'ạ' => 'a', 'ả' => 'a', 'ã' => 'a',
+        'â' => 'a', 'ầ' => 'a', 'ấ' => 'a', 'ậ' => 'a', 'ẩ' => 'a', 'ẫ' => 'a',
+        'ă' => 'a', 'ằ' => 'a', 'ắ' => 'a', 'ặ' => 'a', 'ẳ' => 'a', 'ẵ' => 'a',
+        'è' => 'e', 'é' => 'e', 'ẹ' => 'e', 'ẻ' => 'e', 'ẽ' => 'e',
+        'ê' => 'e', 'ề' => 'e', 'ế' => 'e', 'ệ' => 'e', 'ể' => 'e', 'ễ' => 'e',
+        'ì' => 'i', 'í' => 'i', 'ị' => 'i', 'ỉ' => 'i', 'ĩ' => 'i',
+        'ò' => 'o', 'ó' => 'o', 'ọ' => 'o', 'ỏ' => 'o', 'õ' => 'o',
+        'ô' => 'o', 'ồ' => 'o', 'ố' => 'o', 'ộ' => 'o', 'ổ' => 'o', 'ỗ' => 'o',
+        'ơ' => 'o', 'ờ' => 'o', 'ớ' => 'o', 'ợ' => 'o', 'ở' => 'o', 'ỡ' => 'o',
+        'ù' => 'u', 'ú' => 'u', 'ụ' => 'u', 'ủ' => 'u', 'ũ' => 'u',
+        'ư' => 'u', 'ừ' => 'u', 'ứ' => 'u', 'ự' => 'u', 'ử' => 'u', 'ữ' => 'u',
+        'ỳ' => 'y', 'ý' => 'y', 'ỵ' => 'y', 'ỷ' => 'y', 'ỹ' => 'y',
+        'đ' => 'd',
+    ];
+
+    $value = strtr($value, $map);
+    return preg_replace('/\s+/', ' ', $value);
+}
+
+function getSupportFaqAnswer($question)
+{
+    $normalizedQuestion = normalizeVietnameseText($question);
+    $faqMap = getSupportFaqMap();
+
+    $keywordGroups = [
+        'gia san' => ['gia', 'bang gia', 'chi phi', 'bao nhieu tien'],
+        'gio mo cua' => ['gio mo cua', 'mo cua', 'dong cua', 'gio hoat dong'],
+        'huy san' => ['huy', 'huy san', 'chinh sach huy', 'hoan tien'],
+        'cach dat san' => ['dat san', 'cach dat', 'booking', 'dat lich'],
+    ];
+
+    foreach ($keywordGroups as $faqKey => $keywords) {
+        foreach ($keywords as $keyword) {
+            if (strpos($normalizedQuestion, $keyword) !== false) {
+                return $faqMap[$faqKey];
+            }
+        }
+    }
+
+    return [
+        'title' => 'Hỗ trợ trực tuyến',
+        'answer' => 'Tôi có thể hỗ trợ các câu hỏi phổ biến về giá sân, giờ mở cửa, chính sách hủy và cách đặt sân. Nếu bạn cần xử lý trường hợp cụ thể, hãy tạo cuộc trò chuyện để admin hoặc lễ tân phản hồi.',
+    ];
+}
+
 function formatMoney($number)
 {
     return number_format((float) $number, 0, ',', '.') . ' VNĐ';
@@ -93,6 +208,67 @@ function bookingCanBeCancelled($bookingDate, $startTime)
 {
     $bookingDateTime = strtotime($bookingDate . ' ' . $startTime);
     return $bookingDateTime > time();
+}
+
+function ensureReviewTables($conn)
+{
+    mysqli_query(
+        $conn,
+        "CREATE TABLE IF NOT EXISTS court_reviews (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            booking_id INT NOT NULL,
+            user_id INT NOT NULL,
+            court_id INT NOT NULL,
+            overall_rating TINYINT NOT NULL,
+            court_quality_rating TINYINT NOT NULL,
+            lighting_rating TINYINT NOT NULL,
+            service_rating TINYINT NOT NULL,
+            comment TEXT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_court_reviews_booking UNIQUE (booking_id),
+            CONSTRAINT fk_court_reviews_booking
+                FOREIGN KEY (booking_id) REFERENCES bookings(id)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
+            CONSTRAINT fk_court_reviews_user
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
+            CONSTRAINT fk_court_reviews_court
+                FOREIGN KEY (court_id) REFERENCES courts(id)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+}
+
+function bookingCanBeReviewed($bookingDate, $endTime)
+{
+    $bookingEndDateTime = strtotime($bookingDate . ' ' . $endTime);
+    return $bookingEndDateTime <= time();
+}
+
+function normalizeRatingValue($value)
+{
+    $value = (int) $value;
+    if ($value < 1) {
+        return 1;
+    }
+    if ($value > 5) {
+        return 5;
+    }
+    return $value;
+}
+
+function formatRating($value)
+{
+    return number_format((float) $value, 1, ',', '.');
+}
+
+function renderStars($rating)
+{
+    $filled = max(0, min(5, (int) round((float) $rating)));
+    return str_repeat('★', $filled) . str_repeat('☆', 5 - $filled);
 }
 
 function getCurrentPath()
