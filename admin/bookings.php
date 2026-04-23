@@ -72,6 +72,7 @@ $result = mysqli_stmt_get_result($stmt);
             <th>Ngày</th>
             <th>Giờ</th>
             <th>Tổng tiền</th>
+            <th>Phương thức</th>
             <th>Thanh toán</th>
             <th>Trạng thái</th>
             <th>Thao tác</th>
@@ -84,6 +85,7 @@ $result = mysqli_stmt_get_result($stmt);
                 <td><?= $row['booking_date'] ?></td>
                 <td><?= $row['start_time'] ?> - <?= $row['end_time'] ?></td>
                 <td><?= formatMoney($row['total_price']) ?></td>
+                <td><?= e(getPaymentMethodLabel($row['payment_method'] ?? 'cash')) ?></td>
                 <td>
                     <span class="badge <?= $row['payment_status'] === 'paid' ? 'badge-paid' : 'badge-unpaid' ?>">
                         <?= $row['payment_status'] === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán' ?>

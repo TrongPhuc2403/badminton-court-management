@@ -12,3 +12,9 @@
 # Loại trừ các thư mục hệ thống
 .DS_Store
 Thumbs.db
+
+# Local secrets / verification logs
+.env
+config/email.php
+config/payment.php
+storage/email_verification.log

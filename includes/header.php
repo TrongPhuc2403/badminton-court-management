@@ -10,7 +10,8 @@ require_once __DIR__ . '/functions.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quản lí sân cầu lông</title>
-    <link rel="stylesheet" href="/badminton-manager/assets/style.css">
+    <?php $styleVersion = filemtime(dirname(__DIR__) . '/assets/style.css'); ?>
+    <link rel="stylesheet" href="/badminton-manager/assets/style.css?v=<?= $styleVersion ?>">
 </head>
 <body>
 
@@ -22,13 +23,23 @@ require_once __DIR__ . '/functions.php';
             <p>Manager</p>
         </div>
 
-        <div class="sidebar-user">
-            <div class="avatar"><?= strtoupper(substr($_SESSION['user']['full_name'], 0, 1)) ?></div>
-            <div>
-                <strong><?= e($_SESSION['user']['full_name']) ?></strong>
-                <p><?= $_SESSION['user']['role'] === 'admin' ? 'Quản trị viên' : 'Khách hàng' ?></p>
+        <?php if ($_SESSION['user']['role'] === 'customer'): ?>
+            <a class="sidebar-user sidebar-user-link" href="/badminton-manager/customer/profile.php">
+                <div class="avatar"><?= strtoupper(substr($_SESSION['user']['full_name'], 0, 1)) ?></div>
+                <div>
+                    <strong><?= e($_SESSION['user']['full_name']) ?></strong>
+                    <p>Khách hàng</p>
+                </div>
+            </a>
+        <?php else: ?>
+            <div class="sidebar-user">
+                <div class="avatar"><?= strtoupper(substr($_SESSION['user']['full_name'], 0, 1)) ?></div>
+                <div>
+                    <strong><?= e($_SESSION['user']['full_name']) ?></strong>
+                    <p>Quản trị viên</p>
+                </div>
             </div>
-        </div>
+        <?php endif; ?>
 
         <nav class="sidebar-menu">
             <?php if ($_SESSION['user']['role'] === 'admin'): ?>
@@ -40,6 +51,7 @@ require_once __DIR__ . '/functions.php';
                 <a class="<?= isActiveMenu('/badminton-manager/customer/home.php') ?>" href="/badminton-manager/customer/home.php">Trang chủ</a>
                 <a class="<?= isActiveMenu('/badminton-manager/customer/booking.php') ?>" href="/badminton-manager/customer/booking.php">Đặt sân</a>
                 <a class="<?= isActiveMenu('/badminton-manager/customer/my_bookings.php') ?>" href="/badminton-manager/customer/my_bookings.php">Lịch sử đặt sân</a>
+                <a class="<?= isActiveMenu('/badminton-manager/customer/profile.php') ?>" href="/badminton-manager/customer/profile.php">Thông tin tài khoản</a>
                 <a class="<?= isActiveMenu('/badminton-manager/auth/change_password.php') ?>" href="/badminton-manager/auth/change_password.php">Đổi mật khẩu</a>
             <?php endif; ?>
             <a href="/badminton-manager/auth/logout.php" class="logout-link">Đăng xuất</a>

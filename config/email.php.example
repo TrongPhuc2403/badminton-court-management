@@ -1,0 +1,13 @@
+<?php
+
+return [
+    'transport' => 'smtp',
+    'host' => 'smtp.example.com',
+    'port' => 587,
+    'encryption' => 'tls', // tls | ssl | none
+    'username' => 'your_email@example.com',
+    'password' => 'your_app_password',
+    'from_email' => 'your_email@example.com',
+    'from_name' => 'Badminton Manager',
+    'timeout' => 20,
+];

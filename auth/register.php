@@ -4,46 +4,95 @@ require_once '../config/database.php';
 require_once '../includes/functions.php';
 
 $error = "";
+$success = "";
+$fullName = "";
+$phone = "";
+$email = "";
+
+if (isset($_SESSION['user']) && is_array($_SESSION['user']) && isset($_SESSION['user']['role'])) {
+    redirectByRole();
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $full_name = trim($_POST['full_name']);
-    $phone = trim($_POST['phone']);
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
+    $fullName = trim($_POST['full_name'] ?? '');
+    $phone = normalizeContact($_POST['phone'] ?? '');
+    $email = normalizeContact($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $confirmPassword = $_POST['confirm_password'] ?? '';
 
-    if ($full_name === '' || $phone === '' || $password === '' || $confirm_password === '') {
+    if ($fullName === '' || $phone === '' || $email === '' || $password === '' || $confirmPassword === '') {
         $error = "Vui lòng nhập đầy đủ thông tin.";
-    } elseif ($password !== $confirm_password) {
+    } elseif (detectContactType($phone) !== 'phone') {
+        $error = "Số điện thoại không hợp lệ.";
+    } elseif (detectContactType($email) !== 'email') {
+        $error = "Email không hợp lệ.";
+    } elseif ($password !== $confirmPassword) {
         $error = "Mật khẩu xác nhận không khớp.";
     } elseif (strlen($password) < 6) {
         $error = "Mật khẩu phải có ít nhất 6 ký tự.";
     } else {
-        $checkSql = "SELECT id FROM users WHERE phone = ?";
-        $checkStmt = mysqli_prepare($conn, $checkSql);
-        mysqli_stmt_bind_param($checkStmt, "s", $phone);
-        mysqli_stmt_execute($checkStmt);
-        $checkResult = mysqli_stmt_get_result($checkStmt);
+        $phoneUser = getUserByField($conn, 'phone', $phone);
+        $emailUser = getUserByField($conn, 'email', $email);
 
-        if (mysqli_num_rows($checkResult) > 0) {
+        if ($phoneUser && $emailUser && (int) $phoneUser['id'] !== (int) $emailUser['id']) {
+            $error = "Số điện thoại và email đang thuộc về hai tài khoản khác nhau.";
+        } elseif ($phoneUser && (int) $phoneUser['is_verified'] === 1 && (!$emailUser || (int) $phoneUser['id'] !== (int) $emailUser['id'])) {
             $error = "Số điện thoại đã tồn tại.";
+        } elseif ($emailUser && (int) $emailUser['is_verified'] === 1 && (!$phoneUser || (int) $phoneUser['id'] !== (int) $emailUser['id'])) {
+            $error = "Email đã tồn tại.";
         } else {
+            $existingUser = $phoneUser ?: $emailUser;
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-            $insertSql = "INSERT INTO users (full_name, phone, password, role) VALUES (?, ?, ?, 'customer')";
-            $insertStmt = mysqli_prepare($conn, $insertSql);
-            mysqli_stmt_bind_param($insertStmt, "sss", $full_name, $phone, $hashedPassword);
-            mysqli_stmt_execute($insertStmt);
+            $verificationToken = generateVerificationToken();
+            $verificationExpiresAt = getVerificationExpiryTime();
 
-            $userId = mysqli_insert_id($conn);
+            if ($existingUser) {
+                $updateSql = "UPDATE users
+                              SET full_name = ?, phone = ?, email = ?, password = ?, is_verified = 0,
+                                  verification_token = ?, verification_expires_at = ?, verification_sent_at = NOW(), role = 'customer'
+                              WHERE id = ?";
+                $updateStmt = mysqli_prepare($conn, $updateSql);
+                mysqli_stmt_bind_param(
+                    $updateStmt,
+                    "ssssssi",
+                    $fullName,
+                    $phone,
+                    $email,
+                    $hashedPassword,
+                    $verificationToken,
+                    $verificationExpiresAt,
+                    $existingUser['id']
+                );
+                mysqli_stmt_execute($updateStmt);
+            } else {
+                $insertSql = "INSERT INTO users (
+                                    full_name, phone, email, password, role, is_verified,
+                                    verification_token, verification_expires_at, verification_sent_at
+                              ) VALUES (?, ?, ?, ?, 'customer', 0, ?, ?, NOW())";
+                $insertStmt = mysqli_prepare($conn, $insertSql);
+                mysqli_stmt_bind_param(
+                    $insertStmt,
+                    "ssssss",
+                    $fullName,
+                    $phone,
+                    $email,
+                    $hashedPassword,
+                    $verificationToken,
+                    $verificationExpiresAt
+                );
+                mysqli_stmt_execute($insertStmt);
+            }
 
-            $_SESSION['user'] = [
-                'id' => $userId,
-                'full_name' => $full_name,
-                'phone' => $phone,
-                'role' => 'customer'
-            ];
+            $deliveryResult = sendVerificationEmail($email, $verificationToken);
 
-            header("Location: /badminton-manager/customer/booking.php");
-            exit();
+            if ($deliveryResult['success']) {
+                $success = $deliveryResult['notice'];
+                $fullName = "";
+                $phone = "";
+                $email = "";
+            } else {
+                $error = $deliveryResult['notice'];
+            }
         }
     }
 }
@@ -58,13 +107,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
+<?php if ($success): ?>
+    <div class="alert-success"><?= e($success) ?></div>
+<?php endif; ?>
+
 <div class="form-box">
     <form method="POST">
         <label>Họ và tên</label>
-        <input type="text" name="full_name" required>
+        <input type="text" name="full_name" required value="<?= e($fullName) ?>">
 
         <label>Số điện thoại</label>
-        <input type="text" name="phone" required>
+        <input type="text" name="phone" required value="<?= e($phone) ?>">
+
+        <label>Email</label>
+        <input type="email" name="email" required value="<?= e($email) ?>">
 
         <label>Mật khẩu</label>
         <input type="password" name="password" required>
@@ -73,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="password" name="confirm_password" required>
 
         <br><br>
-        <button type="submit">Tạo tài khoản</button>
+        <button type="submit">Đăng ký và gửi email xác minh</button>
     </form>
 
     <p style="margin-top:16px;" class="text-muted">
