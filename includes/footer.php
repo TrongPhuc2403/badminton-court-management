@@ -1,3 +1,10 @@
-</div> <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<?php if (isset($_SESSION['user']) && is_array($_SESSION['user']) && isset($_SESSION['user']['role'])): ?>
+        </div>
+    </main>
+</div>
+<?php else: ?>
+        </div>
+    </div>
+<?php endif; ?>
 </body>
 </html>
