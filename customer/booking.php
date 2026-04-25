@@ -3,6 +3,47 @@ require_once '../includes/customer_auth.php';
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'payment_status') {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $bookingId = (int) ($_GET['booking_id'] ?? 0);
+    $userId = (int) ($_SESSION['user']['id'] ?? 0);
+
+    if ($bookingId <= 0 || $userId <= 0) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Thiếu dữ liệu'
+        ]);
+        exit();
+    }
+
+    $statusSql = "SELECT id, payment_status, status, payment_method
+                  FROM bookings
+                  WHERE id = ? AND user_id = ?
+                  LIMIT 1";
+    $statusStmt = mysqli_prepare($conn, $statusSql);
+    mysqli_stmt_bind_param($statusStmt, 'ii', $bookingId, $userId);
+    mysqli_stmt_execute($statusStmt);
+    $statusResult = mysqli_stmt_get_result($statusStmt);
+    $statusBooking = mysqli_fetch_assoc($statusResult);
+
+    if (!$statusBooking) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Không tìm thấy booking'
+        ]);
+        exit();
+    }
+
+    echo json_encode([
+        'success' => true,
+        'payment_status' => $statusBooking['payment_status'],
+        'status' => $statusBooking['status'],
+        'payment_method' => $statusBooking['payment_method'],
+    ]);
+    exit();
+}
+
 $error = '';
 $success = '';
 $previewPrice = null;
@@ -10,6 +51,8 @@ $qrCodeUrl = null;
 $paymentReference = null;
 $paymentMethod = $_POST['payment_method'] ?? 'cash';
 $paymentQrIssue = getPaymentQrConfigIssue();
+$currentBooking = null;
+$currentBookingId = (int) ($_GET['booking_id'] ?? 0);
 
 $courts = mysqli_query($conn, "SELECT * FROM courts WHERE status = 'active' ORDER BY id ASC");
 
@@ -30,17 +73,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Chỉ được đặt từ 04:00 đến 22:00, theo từng giờ tròn.';
     } else {
         $previewPrice = calculateBookingPrice($bookingDate, $startTime, $endTime);
-        $paymentReference = 'BOOKING-' . $_SESSION['user']['id'] . '-' . date('YmdHis');
-
-        if ($paymentMethod === 'bank_transfer') {
-            $qrCodeUrl = buildPaymentQrUrl($previewPrice, $paymentReference);
-            $paymentQrIssue = getPaymentQrConfigIssue();
-        }
 
         if ($action === 'book') {
             if (!checkCourtAvailable($conn, $courtId, $bookingDate, $startTime, $endTime)) {
                 $error = 'Sân đã được đặt trong khung giờ này.';
             } else {
+                $temporaryReference = 'BK' . date('His');
+
                 $insertSql = "INSERT INTO bookings (
                                     user_id, court_id, booking_date, start_time, end_time,
                                     total_price, payment_method, payment_reference, payment_status, status
@@ -56,33 +95,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $endTime,
                     $previewPrice,
                     $paymentMethod,
-                    $paymentReference
+                    $temporaryReference
                 );
                 mysqli_stmt_execute($insertStmt);
 
                 $bookingId = mysqli_insert_id($conn);
-                $paymentReference = 'BOOKING-' . str_pad((string) $bookingId, 6, '0', STR_PAD_LEFT);
+                $paymentReference = 'BK' . str_pad((string) $bookingId, 6, '0', STR_PAD_LEFT);
 
                 $updateSql = "UPDATE bookings SET payment_reference = ? WHERE id = ?";
                 $updateStmt = mysqli_prepare($conn, $updateSql);
                 mysqli_stmt_bind_param($updateStmt, 'si', $paymentReference, $bookingId);
                 mysqli_stmt_execute($updateStmt);
 
-                if ($paymentMethod === 'bank_transfer') {
-                    $qrCodeUrl = buildPaymentQrUrl($previewPrice, $paymentReference);
-                    $paymentQrIssue = getPaymentQrConfigIssue();
-                }
-
-                $success = 'Đặt sân thành công. Số tiền cần thanh toán: '
-                    . formatMoney($previewPrice)
-                    . '. Phương thức: '
-                    . getPaymentMethodLabel($paymentMethod);
+                header('Location: /badminton-manager/customer/booking.php?booking_id=' . $bookingId . '&created=1');
+                exit();
             }
+        }
+    }
+}
+
+if ($currentBookingId > 0) {
+    $bookingSql = "SELECT *
+                   FROM bookings
+                   WHERE id = ? AND user_id = ?
+                   LIMIT 1";
+    $bookingStmt = mysqli_prepare($conn, $bookingSql);
+    mysqli_stmt_bind_param($bookingStmt, 'ii', $currentBookingId, $_SESSION['user']['id']);
+    mysqli_stmt_execute($bookingStmt);
+    $bookingResult = mysqli_stmt_get_result($bookingStmt);
+    $currentBooking = mysqli_fetch_assoc($bookingResult);
+
+    if (!$currentBooking) {
+        $error = 'Không tìm thấy booking vừa tạo.';
+        $currentBookingId = 0;
+    } else {
+        $previewPrice = (float) $currentBooking['total_price'];
+        $paymentMethod = $currentBooking['payment_method'];
+        $paymentReference = $currentBooking['payment_reference'];
+
+        if (
+            $paymentMethod === 'bank_transfer' &&
+            $currentBooking['payment_status'] !== 'paid' &&
+            isPaymentQrConfigured()
+        ) {
+            $qrCodeUrl = buildPaymentQrUrl($previewPrice, $paymentReference);
+            $paymentQrIssue = getPaymentQrConfigIssue();
+        }
+
+        if (isset($_GET['created']) && $_GET['created'] === '1') {
+            $success = 'Đặt sân thành công. Số tiền cần thanh toán: '
+                . formatMoney($previewPrice)
+                . '. Phương thức: '
+                . getPaymentMethodLabel($paymentMethod);
         }
     }
 }
 ?>
 <?php require_once '../includes/header.php'; ?>
+
+<style>
+.payment-success-box {
+    text-align: center;
+    padding: 28px 20px;
+    border-radius: 16px;
+    background: #eefcf3;
+    border: 1px solid #b7ebc6;
+}
+
+.payment-success-icon {
+    width: 76px;
+    height: 76px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: #22c55e;
+    color: #fff;
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 76px;
+}
+
+.payment-success-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #15803d;
+    margin-bottom: 8px;
+}
+
+.payment-success-text {
+    color: #334155;
+    font-size: 15px;
+}
+
+.payment-status-waiting {
+    margin-top: 14px;
+    color: #64748b;
+    font-size: 14px;
+    text-align: center;
+}
+
+.payment-status-box {
+    transition: all 0.25s ease;
+}
+</style>
 
 <div class="booking-hero">
     <div class="booking-hero-copy">
@@ -214,23 +328,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </p>
         </div>
 
-        <div class="card booking-payment-card">
+        <div
+            class="card booking-payment-card payment-status-box"
+            id="payment-status-box"
+            <?= $currentBooking ? 'data-booking-id="' . (int) $currentBooking['id'] . '"' : '' ?>
+        >
             <h3>Thanh toán</h3>
+
             <?php if ($paymentMethod === 'cash'): ?>
                 <p class="payment-method-note">Bạn sẽ thanh toán trực tiếp bằng tiền mặt tại sân khi đến chơi.</p>
+
             <?php elseif (!isPaymentQrConfigured()): ?>
                 <p class="payment-method-note"><?= e($paymentQrIssue ?? 'Chưa cấu hình thông tin nhận chuyển khoản.') ?></p>
                 <p class="payment-method-note">Hãy mở <code>config/payment.php</code> và điền đúng <code>bank_id</code>, <code>account_no</code>, <code>account_name</code>.</p>
-            <?php else: ?>
-                <p class="payment-method-note">Quét mã QR bên dưới để chuyển khoản trực tiếp theo số tiền tạm tính.</p>
-                <?php if ($paymentReference): ?>
-                    <p class="payment-reference">Nội dung chuyển khoản: <strong><?= e($paymentReference) ?></strong></p>
-                <?php endif; ?>
-                <?php if ($qrCodeUrl): ?>
-                    <div class="payment-qr-wrap">
-                        <img src="<?= e($qrCodeUrl) ?>" alt="QR chuyển khoản đặt sân">
+
+            <?php elseif ($currentBooking && $currentBooking['payment_status'] === 'paid'): ?>
+                <div class="payment-success-box">
+                    <div class="payment-success-icon">✓</div>
+                    <div class="payment-success-title">Đã nhận thanh toán</div>
+                    <div class="payment-success-text">
+                        Hệ thống đã xác nhận thanh toán thành công cho booking <strong><?= e($paymentReference) ?></strong>.
                     </div>
-                <?php endif; ?>
+                </div>
+
+            <?php elseif ($qrCodeUrl && $paymentReference): ?>
+                <p class="payment-method-note">Quét mã QR bên dưới để chuyển khoản trực tiếp theo số tiền của booking vừa tạo.</p>
+                <p class="payment-reference">Nội dung chuyển khoản: <strong><?= e($paymentReference) ?></strong></p>
+                <div class="payment-qr-wrap">
+                    <img src="<?= e($qrCodeUrl) ?>" alt="QR chuyển khoản đặt sân">
+                </div>
+                <div class="payment-status-waiting">Đang chờ SePay xác nhận thanh toán...</div>
+
+            <?php elseif ($previewPrice !== null): ?>
+                <p class="payment-method-note">
+                    Hệ thống đã tính xong số tiền. Để tạo mã QR thanh toán chính thức và mã SePay đúng chuẩn,
+                    bạn hãy bấm <strong>Đặt sân</strong>.
+                </p>
+
+            <?php else: ?>
+                <p class="payment-method-note">
+                    Chọn phương thức chuyển khoản và bấm <strong>Xem tiền</strong> hoặc <strong>Đặt sân</strong> để tiếp tục.
+                </p>
             <?php endif; ?>
         </div>
 
@@ -257,10 +395,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <ul class="info-list compact-info-list">
                 <li>Chỉ hỗ trợ khung giờ tròn từ 04:00 đến 22:00.</li>
                 <li>Hệ thống sẽ từ chối nếu sân đã có người đặt.</li>
-                <li>Nếu chọn chuyển khoản, hãy dùng đúng nội dung chuyển khoản để dễ đối soát.</li>
+                <li>Nếu chọn chuyển khoản, hãy dùng đúng nội dung chuyển khoản để SePay tự đối soát.</li>
             </ul>
         </div>
     </div>
 </div>
+
+<?php if ($currentBooking && $currentBooking['payment_method'] === 'bank_transfer' && $currentBooking['payment_status'] !== 'paid'): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const paymentBox = document.getElementById('payment-status-box');
+    if (!paymentBox) return;
+
+    const bookingId = paymentBox.dataset.bookingId;
+    if (!bookingId) return;
+
+    let checkedPaid = false;
+
+    async function checkPaymentStatus() {
+        if (checkedPaid) return;
+
+        try {
+            const response = await fetch('booking.php?ajax=payment_status&booking_id=' + bookingId + '&_=' + Date.now());
+            const data = await response.json();
+
+            if (data.success && data.payment_status === 'paid') {
+                checkedPaid = true;
+
+                paymentBox.innerHTML = `
+                    <h3>Thanh toán</h3>
+                    <div class="payment-success-box">
+                        <div class="payment-success-icon">✓</div>
+                        <div class="payment-success-title">Đã nhận thanh toán</div>
+                        <div class="payment-success-text">
+                            Hệ thống đã xác nhận thanh toán thành công cho booking <strong><?= e($paymentReference) ?></strong>.
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.log('Lỗi kiểm tra trạng thái thanh toán:', error);
+        }
+    }
+
+    setInterval(checkPaymentStatus, 3000);
+});
+</script>
+<?php endif; ?>
 
 <?php require_once '../includes/footer.php'; ?>

@@ -1,8 +1,9 @@
 <?php
 
 return [
-    'bank_id' => '970422', // Ma ngan hang VietQR/BIN, khong phai so tai khoan.
-    'account_no' => '0123456789',
+    'bank_id' => '970416', // Ma ngan hang VietQR/BIN, khong phai so tai khoan.
+    'account_no' => '0123456789', // STK
     'account_name' => 'NGUYEN VAN A',
     'template' => 'compact2',
+    'webhook_api_key' => 'SEPAY_WEBHOOK_KEY_123456',
 ];
