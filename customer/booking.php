@@ -2,6 +2,9 @@
 require_once '../includes/customer_auth.php';
 require_once '../config/database.php';
 require_once '../includes/functions.php';
+require_once '../includes/loyalty.php';
+
+ensureLoyaltyTables($conn);
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'payment_status') {
     header('Content-Type: application/json; charset=utf-8');
@@ -12,7 +15,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'payment_status') {
     if ($bookingId <= 0 || $userId <= 0) {
         echo json_encode([
             'success' => false,
-            'message' => 'Thiếu dữ liệu'
+            'message' => 'Thiếu dữ liệu',
         ]);
         exit();
     }
@@ -30,7 +33,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'payment_status') {
     if (!$statusBooking) {
         echo json_encode([
             'success' => false,
-            'message' => 'Không tìm thấy booking'
+            'message' => 'Không tìm thấy booking',
         ]);
         exit();
     }
@@ -47,6 +50,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'payment_status') {
 $error = '';
 $success = '';
 $previewPrice = null;
+$paymentDueNow = null;
 $qrCodeUrl = null;
 $paymentReference = null;
 $paymentMethod = $_POST['payment_method'] ?? 'cash';
@@ -73,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Chỉ được đặt từ 04:00 đến 22:00, theo từng giờ tròn.';
     } else {
         $previewPrice = calculateBookingPrice($bookingDate, $startTime, $endTime);
+        $paymentDueNow = getBookingImmediatePaymentAmount($previewPrice, $paymentMethod);
 
         if ($action === 'book') {
             if (!checkCourtAvailable($conn, $courtId, $bookingDate, $startTime, $endTime)) {
@@ -132,26 +137,24 @@ if ($currentBookingId > 0) {
         $previewPrice = (float) $currentBooking['total_price'];
         $paymentMethod = $currentBooking['payment_method'];
         $paymentReference = $currentBooking['payment_reference'];
+        $paymentDueNow = getBookingImmediatePaymentAmount($previewPrice, $paymentMethod);
 
-        if (
-            $paymentMethod === 'bank_transfer' &&
-            $currentBooking['payment_status'] !== 'paid' &&
-            isPaymentQrConfigured()
-        ) {
-            $qrCodeUrl = buildPaymentQrUrl($previewPrice, $paymentReference);
+        if ($currentBooking['payment_status'] !== 'paid' && isPaymentQrConfigured()) {
+            $qrCodeUrl = buildPaymentQrUrl($paymentDueNow, $paymentReference);
             $paymentQrIssue = getPaymentQrConfigIssue();
         }
 
         if (isset($_GET['created']) && $_GET['created'] === '1') {
-            $success = 'Đặt sân thành công. Số tiền cần thanh toán: '
-                . formatMoney($previewPrice)
+            $success = 'Đặt sân thành công. Số tiền cần thanh toán ngay: '
+                . formatMoney($paymentDueNow)
                 . '. Phương thức: '
                 . getPaymentMethodLabel($paymentMethod);
         }
     }
 }
+
+require_once '../includes/header.php';
 ?>
-<?php require_once '../includes/header.php'; ?>
 
 <style>
 .payment-success-box {
@@ -196,6 +199,18 @@ if ($currentBookingId > 0) {
 .payment-status-box {
     transition: all 0.25s ease;
 }
+
+.payment-summary-lines {
+    display: grid;
+    gap: 8px;
+    margin: 14px 0;
+    color: #334155;
+    font-size: 14px;
+}
+
+.payment-summary-lines strong {
+    color: #0f172a;
+}
 </style>
 
 <div class="booking-hero">
@@ -204,13 +219,14 @@ if ($currentBookingId > 0) {
         <h2>Đặt sân cầu lông nhanh, rõ lịch, đúng khung giờ</h2>
         <p>
             Chọn sân, ngày, khung giờ và phương thức thanh toán theo nhu cầu.
-            Hệ thống sẽ kiểm tra hợp lệ, báo giá và hỗ trợ thanh toán trực tiếp nếu bạn chọn chuyển khoản.
+            Nếu chọn tiền mặt, hệ thống yêu cầu cọc 30%. Nếu chọn chuyển khoản,
+            hệ thống yêu cầu thanh toán toàn bộ giá trị booking.
         </p>
 
         <div class="booking-hero-points">
             <span>8 sân hoạt động</span>
             <span>Giờ mở cửa 04:00 - 22:00</span>
-            <span>Hỗ trợ tiền mặt hoặc chuyển khoản</span>
+            <span>Hỗ trợ tiền mặt đặt cọc hoặc chuyển khoản toàn bộ</span>
         </div>
     </div>
 
@@ -221,11 +237,11 @@ if ($currentBookingId > 0) {
         </div>
         <div class="booking-hero-stat">
             <strong>Giá từ</strong>
-            <span>90.000 VNĐ / giờ</span>
+            <span>90.000 VND / gio</span>
         </div>
         <div class="booking-hero-stat">
             <strong>Thanh toán</strong>
-            <span>Tiền mặt / QR</span>
+            <span>Coc 30% / QR 100%</span>
         </div>
     </div>
 </div>
@@ -242,8 +258,8 @@ if ($currentBookingId > 0) {
     <div class="form-box booking-form-card">
         <div class="booking-form-head">
             <div>
-                <h3>Tạo đơn đặt sân</h3>
-                <p>Điền đủ thông tin để xem giá, chọn cách thanh toán và xác nhận đặt sân.</p>
+                <h3>Tao don dat san</h3>
+                <p>Điền đủ thông tin để xem tổng tiền, số tiền cần thanh toán ngay và tạo booking.</p>
             </div>
             <span class="booking-head-badge">Đang nhận lịch</span>
         </div>
@@ -255,7 +271,7 @@ if ($currentBookingId > 0) {
                     <option value="">-- Chọn sân --</option>
                     <?php mysqli_data_seek($courts, 0); ?>
                     <?php while ($court = mysqli_fetch_assoc($courts)): ?>
-                        <option value="<?= $court['id'] ?>" <?= (isset($_POST['court_id']) && $_POST['court_id'] == $court['id']) ? 'selected' : '' ?>>
+                        <option value="<?= (int) $court['id'] ?>" <?= (isset($_POST['court_id']) && (int) $_POST['court_id'] === (int) $court['id']) ? 'selected' : '' ?>>
                             <?= e($court['name']) ?>
                         </option>
                     <?php endwhile; ?>
@@ -294,7 +310,7 @@ if ($currentBookingId > 0) {
                         <input type="radio" name="payment_method" value="cash" <?= $paymentMethod === 'cash' ? 'checked' : '' ?>>
                         <span>
                             <strong>Tiền mặt</strong>
-                            <small>Thanh toán trực tiếp tại sân</small>
+                            <small>Cọc 30%, phần còn lại thanh toán tại sân</small>
                         </span>
                     </label>
 
@@ -302,7 +318,7 @@ if ($currentBookingId > 0) {
                         <input type="radio" name="payment_method" value="bank_transfer" <?= $paymentMethod === 'bank_transfer' ? 'checked' : '' ?>>
                         <span>
                             <strong>Chuyển khoản</strong>
-                            <small>Quét QR để thanh toán nhanh</small>
+                            <small>Thanh toán toàn bộ bằng QR</small>
                         </span>
                     </label>
                 </div>
@@ -317,15 +333,23 @@ if ($currentBookingId > 0) {
 
     <div class="booking-side-panel">
         <div class="card booking-summary-card">
-            <div class="booking-summary-label">Tạm tính</div>
+            <div class="booking-summary-label">Tổng giá trị booking</div>
             <div class="booking-summary-number">
                 <?= $previewPrice !== null ? formatMoney($previewPrice) : 'Chưa có dữ liệu' ?>
             </div>
             <p>
                 <?= $previewPrice !== null
-                    ? 'Chi phí được tính theo ngày, khung giờ và sẵn sàng cho phương thức thanh toán bạn đã chọn.'
+                    ? 'Hệ thống giữ nguyên tổng giá trị booking và tính riêng số tiền cần thanh toán ngay theo phương thức bạn chọn.'
                     : 'Chọn sân, ngày, giờ và phương thức thanh toán rồi bấm "Xem tiền".' ?>
             </p>
+            <?php if ($paymentDueNow !== null): ?>
+                <div class="payment-summary-lines">
+                    <div>Cần thanh toán ngay: <strong><?= formatMoney($paymentDueNow) ?></strong></div>
+                    <?php if ($paymentMethod === 'cash'): ?>
+                        <div>Còn lại thanh toán tại sân: <strong><?= formatMoney(getBookingRemainingCashAmount($previewPrice, $paymentMethod)) ?></strong></div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         </div>
 
         <div
@@ -335,39 +359,54 @@ if ($currentBookingId > 0) {
         >
             <h3>Thanh toán</h3>
 
-            <?php if ($paymentMethod === 'cash'): ?>
-                <p class="payment-method-note">Bạn sẽ thanh toán trực tiếp bằng tiền mặt tại sân khi đến chơi.</p>
-
-            <?php elseif (!isPaymentQrConfigured()): ?>
+            <?php if (!isPaymentQrConfigured()): ?>
                 <p class="payment-method-note"><?= e($paymentQrIssue ?? 'Chưa cấu hình thông tin nhận chuyển khoản.') ?></p>
                 <p class="payment-method-note">Hãy mở <code>config/payment.php</code> và điền đúng <code>bank_id</code>, <code>account_no</code>, <code>account_name</code>.</p>
 
             <?php elseif ($currentBooking && $currentBooking['payment_status'] === 'paid'): ?>
                 <div class="payment-success-box">
                     <div class="payment-success-icon">✓</div>
-                    <div class="payment-success-title">Đã nhận thanh toán</div>
+                    <div class="payment-success-title">
+                        <?= $paymentMethod === 'cash' ? 'Đã nhận cọc 30%' : 'Đã nhận thanh toán' ?>
+                    </div>
                     <div class="payment-success-text">
-                        Hệ thống đã xác nhận thanh toán thành công cho booking <strong><?= e($paymentReference) ?></strong>.
+                        Booking <strong><?= e($paymentReference) ?></strong> đã được xác nhận.
+                        <?php if ($paymentMethod === 'cash'): ?>
+                            Phần còn lại thanh toán tại sân.
+                        <?php endif; ?>
                     </div>
                 </div>
 
             <?php elseif ($qrCodeUrl && $paymentReference): ?>
-                <p class="payment-method-note">Quét mã QR bên dưới để chuyển khoản trực tiếp theo số tiền của booking vừa tạo.</p>
+                <p class="payment-method-note">
+                    <?php if ($paymentMethod === 'cash'): ?>
+                        Quét QR để thanh toán tiền cọc 30% cho booking vừa tạo.
+                    <?php else: ?>
+                        Quét QR để thanh toán toàn bộ giá trị booking.
+                    <?php endif; ?>
+                </p>
+                <div class="payment-summary-lines">
+                    <div>Tổng giá trị booking: <strong><?= formatMoney($previewPrice) ?></strong></div>
+                    <div>Số tiền cần thanh toán ngay: <strong><?= formatMoney($paymentDueNow) ?></strong></div>
+                    <?php if ($paymentMethod === 'cash'): ?>
+                        <div>Còn lại trả tại sân: <strong><?= formatMoney(getBookingRemainingCashAmount($previewPrice, $paymentMethod)) ?></strong></div>
+                    <?php endif; ?>
+                </div>
                 <p class="payment-reference">Nội dung chuyển khoản: <strong><?= e($paymentReference) ?></strong></p>
                 <div class="payment-qr-wrap">
-                    <img src="<?= e($qrCodeUrl) ?>" alt="QR chuyển khoản đặt sân">
+                    <img src="<?= e($qrCodeUrl) ?>" alt="QR thanh toán booking">
                 </div>
                 <div class="payment-status-waiting">Đang chờ SePay xác nhận thanh toán...</div>
 
             <?php elseif ($previewPrice !== null): ?>
                 <p class="payment-method-note">
-                    Hệ thống đã tính xong số tiền. Để tạo mã QR thanh toán chính thức và mã SePay đúng chuẩn,
-                    bạn hãy bấm <strong>Đặt sân</strong>.
+                    Hệ thống đã tính xong tổng tiền và số tiền cần thanh toán ngay.
+                    Bấm <strong>Đặt sân</strong> để tạo booking và hiện QR thanh toán.
                 </p>
 
             <?php else: ?>
                 <p class="payment-method-note">
-                    Chọn phương thức chuyển khoản và bấm <strong>Xem tiền</strong> hoặc <strong>Đặt sân</strong> để tiếp tục.
+                    Chọn phương thức thanh toán và bấm <strong>Xem tiền</strong> hoặc <strong>Đặt sân</strong> để tiếp tục.
                 </p>
             <?php endif; ?>
         </div>
@@ -377,15 +416,15 @@ if ($currentBookingId > 0) {
             <div class="booking-price-lines">
                 <div class="booking-price-line">
                     <span>Thứ 2 - Thứ 6</span>
-                    <strong>04:00 - 16:00 • 90.000 VNĐ / giờ</strong>
+                    <strong>04:00 - 16:00 • 90.000 VND / giờ</strong>
                 </div>
                 <div class="booking-price-line">
                     <span>Thứ 2 - Thứ 6</span>
-                    <strong>17:00 - 22:00 • 120.000 VNĐ / giờ</strong>
+                    <strong>17:00 - 22:00 • 120.000 VND / giờ</strong>
                 </div>
                 <div class="booking-price-line">
                     <span>Thứ 7 - Chủ nhật</span>
-                    <strong>04:00 - 22:00 • 120.000 VNĐ / giờ</strong>
+                    <strong>04:00 - 22:00 • 120.000 VND / giờ</strong>
                 </div>
             </div>
         </div>
@@ -395,13 +434,14 @@ if ($currentBookingId > 0) {
             <ul class="info-list compact-info-list">
                 <li>Chỉ hỗ trợ khung giờ tròn từ 04:00 đến 22:00.</li>
                 <li>Hệ thống sẽ từ chối nếu sân đã có người đặt.</li>
-                <li>Nếu chọn chuyển khoản, hãy dùng đúng nội dung chuyển khoản để SePay tự đối soát.</li>
+                <li>Nếu chọn tiền mặt, bạn cần cọc 30% để giữ lịch.</li>
+                <li>Nếu chọn chuyển khoản, bạn cần chuyển đủ tổng tiền và đúng nội dung booking.</li>
             </ul>
         </div>
     </div>
 </div>
 
-<?php if ($currentBooking && $currentBooking['payment_method'] === 'bank_transfer' && $currentBooking['payment_status'] !== 'paid'): ?>
+<?php if ($currentBooking && $currentBooking['payment_status'] !== 'paid' && $qrCodeUrl): ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const paymentBox = document.getElementById('payment-status-box');
@@ -426,9 +466,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     <h3>Thanh toán</h3>
                     <div class="payment-success-box">
                         <div class="payment-success-icon">✓</div>
-                        <div class="payment-success-title">Đã nhận thanh toán</div>
+                        <div class="payment-success-title"><?= $paymentMethod === 'cash' ? 'Đã nhận cọc 30%' : 'Đã nhận thanh toán' ?></div>
                         <div class="payment-success-text">
-                            Hệ thống đã xác nhận thanh toán thành công cho booking <strong><?= e($paymentReference) ?></strong>.
+                            Booking <strong><?= e($paymentReference) ?></strong> đã được xác nhận<?= $paymentMethod === 'cash' ? '. Phần còn lại thanh toán tại sân.' : '.' ?>
                         </div>
                     </div>
                 `;

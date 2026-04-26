@@ -2,10 +2,31 @@
 require_once '../includes/admin_auth.php';
 require_once '../config/database.php';
 require_once '../includes/functions.php';
+require_once '../includes/loyalty.php';
 require_once '../includes/header.php';
 
+ensureLoyaltyTables($conn);
+syncPendingLoyaltyAwards($conn);
+
+$success = '';
+$error = '';
+
+if (isset($_GET['success']) && $_GET['success'] === 'booking_cancelled') {
+    $success = 'Đã hủy lịch đặt sân của khách hàng.';
+}
+
+if (isset($_GET['error'])) {
+    if ($_GET['error'] === 'invalid_booking') {
+        $error = 'Booking không hợp lệ.';
+    } elseif ($_GET['error'] === 'booking_not_cancellable') {
+        $error = 'Booking này không thể hủy.';
+    } elseif ($_GET['error'] === 'payment_confirmation_disabled') {
+        $error = 'Tính năng xác nhận tiền thủ công đã bị tắt.';
+    }
+}
+
 $date = isset($_GET['date']) ? $_GET['date'] : '';
-$courtId = isset($_GET['court_id']) ? (int)$_GET['court_id'] : 0;
+$courtId = isset($_GET['court_id']) ? (int) $_GET['court_id'] : 0;
 
 $courts = mysqli_query($conn, "SELECT * FROM courts ORDER BY id ASC");
 
@@ -15,18 +36,18 @@ $sql = "SELECT b.*, u.full_name, u.phone, c.name AS court_name
         JOIN courts c ON b.court_id = c.id
         WHERE 1=1";
 $params = [];
-$types = "";
+$types = '';
 
 if ($date !== '') {
     $sql .= " AND b.booking_date = ?";
     $params[] = $date;
-    $types .= "s";
+    $types .= 's';
 }
 
 if ($courtId > 0) {
     $sql .= " AND b.court_id = ?";
     $params[] = $courtId;
-    $types .= "i";
+    $types .= 'i';
 }
 
 $sql .= " ORDER BY b.booking_date DESC, b.start_time DESC";
@@ -39,8 +60,16 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 ?>
 
+<?php if ($success): ?>
+    <div class="alert-success"><?= e($success) ?></div>
+<?php endif; ?>
+
+<?php if ($error): ?>
+    <div class="alert-error"><?= e($error) ?></div>
+<?php endif; ?>
+
 <div class="page-title">
-    <h2>Quản lí đặt sân</h2>
+    <h2>Quản lý đặt sân</h2>
 </div>
 
 <div class="form-box">
@@ -52,7 +81,7 @@ $result = mysqli_stmt_get_result($stmt);
         <select name="court_id">
             <option value="0">-- Tất cả sân --</option>
             <?php while ($court = mysqli_fetch_assoc($courts)): ?>
-                <option value="<?= $court['id'] ?>" <?= $courtId === (int)$court['id'] ? 'selected' : '' ?>>
+                <option value="<?= (int) $court['id'] ?>" <?= $courtId === (int) $court['id'] ? 'selected' : '' ?>>
                     <?= e($court['name']) ?>
                 </option>
             <?php endwhile; ?>
@@ -67,7 +96,7 @@ $result = mysqli_stmt_get_result($stmt);
     <table>
         <tr>
             <th>Khách hàng</th>
-            <th>SĐT</th>
+            <th>SDT</th>
             <th>Sân</th>
             <th>Ngày</th>
             <th>Giờ</th>
@@ -82,23 +111,23 @@ $result = mysqli_stmt_get_result($stmt);
                 <td><?= e($row['full_name']) ?></td>
                 <td><?= e($row['phone']) ?></td>
                 <td><?= e($row['court_name']) ?></td>
-                <td><?= $row['booking_date'] ?></td>
-                <td><?= $row['start_time'] ?> - <?= $row['end_time'] ?></td>
+                <td><?= e($row['booking_date']) ?></td>
+                <td><?= e($row['start_time']) ?> - <?= e($row['end_time']) ?></td>
                 <td><?= formatMoney($row['total_price']) ?></td>
                 <td><?= e(getPaymentMethodLabel($row['payment_method'] ?? 'cash')) ?></td>
                 <td>
                     <span class="badge <?= $row['payment_status'] === 'paid' ? 'badge-paid' : 'badge-unpaid' ?>">
-                        <?= $row['payment_status'] === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán' ?>
+                        <?= e(getPaymentStatusDisplayLabel($row['payment_status'], $row['payment_method'] ?? 'cash')) ?>
                     </span>
                 </td>
                 <td>
                     <span class="badge <?= $row['status'] === 'confirmed' ? 'badge-confirmed' : 'badge-cancelled' ?>">
-                        <?= $row['status'] === 'confirmed' ? 'Đã đặt' : 'Đã hủy' ?>
+                        <?= $row['status'] === 'confirmed' ? 'Da dat' : 'Da huy' ?>
                     </span>
                 </td>
                 <td>
-                    <?php if ($row['status'] === 'confirmed' && $row['payment_status'] === 'unpaid'): ?>
-                        <a class="button" href="/badminton-manager/admin/booking_payment.php?id=<?= $row['id'] ?>">Xác nhận tiền</a>
+                    <?php if ($row['status'] === 'confirmed'): ?>
+                        <a class="button-danger" onclick="return confirm('Bạn có chắc muốn hủy booking này?')" href="/badminton-manager/admin/cancel_booking.php?id=<?= (int) $row['id'] ?>">Hủy booking</a>
                     <?php else: ?>
                         -
                     <?php endif; ?>

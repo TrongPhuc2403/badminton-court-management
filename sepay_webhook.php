@@ -1,5 +1,7 @@
 <?php
 require_once 'config/database.php';
+require_once 'includes/functions.php';
+require_once 'includes/loyalty.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -88,8 +90,17 @@ if (!is_array($data)) {
 
 $transactionId = (int)($data['id'] ?? 0);
 $paymentCode = trim((string)($data['code'] ?? ''));
+$transferContent = trim((string)($data['content'] ?? ''));
+$transferDescription = trim((string)($data['description'] ?? ''));
 $transferType = trim((string)($data['transferType'] ?? ''));
 $transferAmount = (float)($data['transferAmount'] ?? 0);
+
+if ($paymentCode === '') {
+    $fallbackText = $transferContent !== '' ? $transferContent : $transferDescription;
+    if ($fallbackText !== '' && preg_match('/\bBK\d{6}\b/', $fallbackText, $matches) === 1) {
+        $paymentCode = $matches[0];
+    }
+}
 
 if ($transactionId <= 0 || $transferType !== 'in' || $paymentCode === '' || $transferAmount <= 0) {
     http_response_code(200);
@@ -137,7 +148,12 @@ if (($booking['payment_status'] ?? '') === 'paid') {
     exit();
 }
 
-if ((float)$booking['total_price'] !== $transferAmount) {
+$expectedAmount = getBookingImmediatePaymentAmount(
+    (float) ($booking['total_price'] ?? 0),
+    (string) ($booking['payment_method'] ?? '')
+);
+
+if ((float)$expectedAmount !== $transferAmount) {
     http_response_code(200);
     echo json_encode([
         'success' => true,
@@ -153,6 +169,10 @@ $updateSql = "UPDATE bookings
 $updateStmt = mysqli_prepare($conn, $updateSql);
 mysqli_stmt_bind_param($updateStmt, 'i', $booking['id']);
 mysqli_stmt_execute($updateStmt);
+
+if (mysqli_stmt_affected_rows($updateStmt) > 0) {
+    awardBookingLoyaltyPointsIfEligible($conn, (int) $booking['id']);
+}
 
 http_response_code(200);
 echo json_encode([

@@ -2,6 +2,10 @@
 require_once '../includes/admin_auth.php';
 require_once '../config/database.php';
 require_once '../includes/functions.php';
+require_once '../includes/loyalty.php';
+
+ensureLoyaltyTables($conn);
+syncPendingLoyaltyAwards($conn);
 
 function bindStatementParams($stmt, $types, array &$params)
 {
@@ -709,7 +713,7 @@ require_once '../includes/header.php';
                         <td><?= formatMoney($row['total_price']) ?></td>
                         <td>
                             <span class="badge <?= $row['payment_status'] === 'paid' ? 'badge-paid' : 'badge-unpaid' ?>">
-                                <?= $row['payment_status'] === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán' ?>
+                                <?= e(getPaymentStatusDisplayLabel($row['payment_status'], $row['payment_method'] ?? 'cash')) ?>
                             </span>
                         </td>
                         <td>

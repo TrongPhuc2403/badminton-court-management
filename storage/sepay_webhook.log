@@ -1,0 +1,8 @@
+[2026-04-26 15:27:38]
+AUTH: Apikey tttd_sepay_8
+BODY: {"gateway":"MBBank","transactionDate":"2026-04-26 20:27:00","accountNumber":"0941473515","subAccount":null,"code":null,"content":"MBVCB.13963138633.209484.BK000015.CT tu 1050806526 NGUYEN TRONG PHUC toi 0941473515 NGUYEN TRONG PHUC tai MB- Ma GD ACSP\/ st209484","transferType":"in","description":"BankAPINotify MBVCB.13963138633.209484.BK000015.CT tu 1050806526 NGUYEN TRONG PHUC toi 0941473515 NGUYEN TRONG PHUC tai MB- Ma GD ACSP\/ st209484","transferAmount":120000,"referenceCode":"FT26117264002732","accumulated":0,"id":53750782}
+
+[2026-04-26 15:31:41]
+AUTH: Apikey tttd_sepay_8
+BODY: {"gateway":"MBBank","transactionDate":"2026-04-26 20:31:00","accountNumber":"0941473515","subAccount":null,"code":null,"content":"MBVCB.13963191288.245324.BK000016.CT tu 1050806526 NGUYEN TRONG PHUC toi 0941473515 NGUYEN TRONG PHUC tai MB- Ma GD ACSP\/ ru245324","transferType":"in","description":"BankAPINotify MBVCB.13963191288.245324.BK000016.CT tu 1050806526 NGUYEN TRONG PHUC toi 0941473515 NGUYEN TRONG PHUC tai MB- Ma GD ACSP\/ ru245324","transferAmount":120000,"referenceCode":"FT26117855446043","accumulated":0,"id":53751677}
+

@@ -7,6 +7,8 @@ USE badminton_manager;
 SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS loyalty_point_transactions;
+DROP TABLE IF EXISTS loyalty_redemptions;
 DROP TABLE IF EXISTS court_reviews;
 DROP TABLE IF EXISTS support_messages;
 DROP TABLE IF EXISTS support_threads;
@@ -22,6 +24,7 @@ CREATE TABLE users (
     email VARCHAR(120) UNIQUE,
     password VARCHAR(255) NOT NULL,
     role ENUM('admin', 'customer') NOT NULL DEFAULT 'customer',
+    loyalty_points INT NOT NULL DEFAULT 0,
     is_verified TINYINT(1) NOT NULL DEFAULT 0,
     verification_token VARCHAR(64) DEFAULT NULL,
     verification_expires_at DATETIME DEFAULT NULL,
@@ -48,6 +51,8 @@ CREATE TABLE bookings (
     payment_method ENUM('cash', 'bank_transfer') NOT NULL DEFAULT 'cash',
     payment_reference VARCHAR(50) DEFAULT NULL,
     payment_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+    loyalty_points_credited TINYINT(1) NOT NULL DEFAULT 0,
+    loyalty_points_awarded INT NOT NULL DEFAULT 0,
     status ENUM('confirmed', 'cancelled') NOT NULL DEFAULT 'confirmed',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_bookings_user
@@ -56,6 +61,37 @@ CREATE TABLE bookings (
         ON UPDATE CASCADE,
     CONSTRAINT fk_bookings_court
         FOREIGN KEY (court_id) REFERENCES courts(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE loyalty_point_transactions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    booking_id INT DEFAULT NULL,
+    redemption_id INT DEFAULT NULL,
+    points_change INT NOT NULL,
+    balance_after INT NOT NULL,
+    description VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_loyalty_transactions_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE loyalty_redemptions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    reward_type ENUM('free_hour', 'shuttlecock') NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    points_used INT NOT NULL,
+    status ENUM('pending', 'fulfilled', 'cancelled') NOT NULL DEFAULT 'pending',
+    note VARCHAR(255) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_loyalty_redemptions_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -2,24 +2,29 @@
 require_once '../includes/customer_auth.php';
 require_once '../config/database.php';
 require_once '../includes/functions.php';
+require_once '../includes/loyalty.php';
 
 ensureReviewTables($conn);
+ensureLoyaltyTables($conn);
+syncPendingLoyaltyAwards($conn);
 
 $success = '';
 $error = '';
 
 if (isset($_GET['success'])) {
-    if ($_GET['success'] === 'payment_confirmed') {
-        $success = 'Đã cập nhật trạng thái thanh toán cho đơn đặt sân.';
-    } elseif ($_GET['success'] === 'booking_cancelled') {
+    if ($_GET['success'] === 'booking_cancelled') {
         $success = 'Đã hủy đơn đặt sân.';
     } elseif ($_GET['success'] === 'review_saved') {
         $success = 'Đã lưu đánh giá sân và dịch vụ.';
     }
 }
 
-if (isset($_GET['error']) && $_GET['error'] === 'invalid_payment_confirmation') {
-    $error = 'Không thể cập nhật thanh toán cho đơn này.';
+if (isset($_GET['error'])) {
+    if ($_GET['error'] === 'invalid_payment_confirmation') {
+        $error = 'Không thể cập nhật thanh toán cho đơn này.';
+    } elseif ($_GET['error'] === 'payment_confirmation_disabled') {
+        $error = 'Tính năng xác nhận tiền thủ công đã bị tắt.';
+    }
 }
 
 $sql = "SELECT
@@ -55,7 +60,7 @@ require_once '../includes/header.php';
 <div class="table-wrapper">
     <table>
         <tr>
-            <th>Sân</th>
+            <th>San</th>
             <th>Ngày</th>
             <th>Giờ</th>
             <th>Tổng tiền</th>
@@ -74,12 +79,12 @@ require_once '../includes/header.php';
                 <td><?= e(getPaymentMethodLabel($row['payment_method'] ?? 'cash')) ?></td>
                 <td>
                     <span class="badge <?= $row['payment_status'] === 'paid' ? 'badge-paid' : 'badge-unpaid' ?>">
-                        <?= $row['payment_status'] === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán' ?>
+                        <?= e(getPaymentStatusDisplayLabel($row['payment_status'], $row['payment_method'] ?? 'cash')) ?>
                     </span>
                 </td>
                 <td>
                     <span class="badge <?= $row['status'] === 'confirmed' ? 'badge-confirmed' : 'badge-cancelled' ?>">
-                        <?= $row['status'] === 'confirmed' ? 'Đã đặt' : 'Đã hủy' ?>
+                        <?= $row['status'] === 'confirmed' ? 'Da dat' : 'Da huy' ?>
                     </span>
                 </td>
                 <td>
@@ -95,16 +100,7 @@ require_once '../includes/header.php';
                     <?php endif; ?>
                 </td>
                 <td>
-                    <?php if (
-                        $row['status'] === 'confirmed' &&
-                        $row['payment_status'] === 'unpaid' &&
-                        ($row['payment_method'] ?? 'cash') === 'bank_transfer'
-                    ): ?>
-                        <form method="POST" action="/badminton-manager/customer/confirm_transfer.php" class="inline-action-form">
-                            <input type="hidden" name="booking_id" value="<?= (int) $row['id'] ?>">
-                            <button type="submit" class="button">Đã chuyển khoản</button>
-                        </form>
-                    <?php elseif ($row['status'] === 'confirmed' && bookingCanBeCancelled($row['booking_date'], $row['start_time'])): ?>
+                    <?php if ($row['status'] === 'confirmed' && bookingCanBeCancelled($row['booking_date'], $row['start_time'])): ?>
                         <a class="button-danger" onclick="return confirm('Bạn có chắc muốn hủy booking này?')" href="/badminton-manager/customer/cancel_booking.php?id=<?= (int) $row['id'] ?>">Hủy</a>
                     <?php elseif ($row['status'] === 'confirmed' && bookingCanBeReviewed($row['booking_date'], $row['end_time'])): ?>
                         <a class="button" href="/badminton-manager/customer/review.php?booking_id=<?= (int) $row['id'] ?>">

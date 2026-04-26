@@ -2,19 +2,23 @@
 require_once '../includes/customer_auth.php';
 require_once '../config/database.php';
 require_once '../includes/functions.php';
+require_once '../includes/loyalty.php';
 
-$error = "";
-$success = "";
+ensureLoyaltyTables($conn);
+syncPendingLoyaltyAwards($conn);
 
-$sql = "SELECT id, full_name, phone, email, is_verified FROM users WHERE id = ?";
+$error = '';
+$success = '';
+
+$sql = "SELECT id, full_name, phone, email, is_verified, loyalty_points FROM users WHERE id = ?";
 $stmt = mysqli_prepare($conn, $sql);
-mysqli_stmt_bind_param($stmt, "i", $_SESSION['user']['id']);
+mysqli_stmt_bind_param($stmt, 'i', $_SESSION['user']['id']);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 $currentUser = mysqli_fetch_assoc($result);
 
 if (!$currentUser) {
-    header("Location: /badminton-manager/auth/logout.php");
+    header('Location: /badminton-manager/auth/logout.php');
     exit();
 }
 
@@ -28,19 +32,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = normalizeContact($_POST['email'] ?? '');
 
     if ($fullName === '' || $phone === '' || $email === '') {
-        $error = "Vui lòng nhập đầy đủ thông tin.";
+        $error = 'Vui lòng nhập đầy đủ thông tin.';
     } elseif (detectContactType($phone) !== 'phone') {
-        $error = "Số điện thoại không hợp lệ.";
+        $error = 'Số điện thoại không hợp lệ.';
     } elseif (detectContactType($email) !== 'email') {
-        $error = "Email không hợp lệ.";
+        $error = 'Email không hợp lệ.';
     } else {
         $phoneUser = getUserByField($conn, 'phone', $phone);
         $emailUser = getUserByField($conn, 'email', $email);
 
         if ($phoneUser && (int) $phoneUser['id'] !== (int) $currentUser['id']) {
-            $error = "Số điện thoại đã được sử dụng bởi tài khoản khác.";
+            $error = 'Số điện thoại đã được sử dụng bởi tài khoản khác.';
         } elseif ($emailUser && (int) $emailUser['id'] !== (int) $currentUser['id']) {
-            $error = "Email đã được sử dụng bởi tài khoản khác.";
+            $error = 'Email đã được sử dụng bởi tài khoản khác.';
         } else {
             $emailChanged = $email !== $currentUser['email'];
             $verificationToken = $emailChanged ? generateVerificationToken() : $currentUser['verification_token'];
@@ -55,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $updateStmt = mysqli_prepare($conn, $updateSql);
             mysqli_stmt_bind_param(
                 $updateStmt,
-                "sssissii",
+                'sssissii',
                 $fullName,
                 $phone,
                 $email,
@@ -73,10 +77,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($emailChanged) {
                 $deliveryResult = sendVerificationEmail($email, $verificationToken);
-                $success = "Cập nhật thành công. " . $deliveryResult['notice'];
+                $success = 'Cập nhật thành công. ' . $deliveryResult['notice'];
                 $currentUser['is_verified'] = 0;
             } else {
-                $success = "Cập nhật thông tin thành công.";
+                $success = 'Cập nhật thông tin thành công.';
             }
 
             $currentUser['full_name'] = $fullName;
@@ -118,6 +122,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <p style="margin-top:16px;" class="text-muted">
         Trạng thái email:
         <strong><?= (int) $currentUser['is_verified'] === 1 ? 'Đã xác minh' : 'Chưa xác minh' ?></strong>
+    </p>
+
+    <p style="margin-top:10px;" class="text-muted">
+        Điểm tích lũy hiện có:
+        <strong><?= (int) ($currentUser['loyalty_points'] ?? 0) ?> điểm</strong>
     </p>
 </div>
 

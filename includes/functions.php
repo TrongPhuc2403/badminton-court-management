@@ -161,6 +161,37 @@ function calculateBookingPrice($bookingDate, $startTime, $endTime)
     return $total;
 }
 
+function getBookingImmediatePaymentAmount($totalPrice, $paymentMethod)
+{
+    $totalPrice = (float) $totalPrice;
+
+    if ($paymentMethod === 'cash') {
+        return (float) round($totalPrice * 0.3);
+    }
+
+    return $totalPrice;
+}
+
+function getBookingRemainingCashAmount($totalPrice, $paymentMethod)
+{
+    $totalPrice = (float) $totalPrice;
+
+    if ($paymentMethod !== 'cash') {
+        return 0;
+    }
+
+    return max(0, $totalPrice - getBookingImmediatePaymentAmount($totalPrice, $paymentMethod));
+}
+
+function getPaymentStatusLabel($paymentStatus, $paymentMethod)
+{
+    if ($paymentMethod === 'cash') {
+        return $paymentStatus === 'paid' ? 'Đã cọc 30%' : 'Chưa cọc';
+    }
+
+    return $paymentStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán';
+}
+
 function isValidHourStep($time)
 {
     return preg_match('/^\d{2}:00$/', $time) === 1;
